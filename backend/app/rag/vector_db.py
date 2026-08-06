@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from hashlib import md5
+from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -10,6 +13,8 @@ from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     RecursiveCharacterTextSplitter,
 )
+
+from app.rag.pdf_loader import load_pdf_pages
 
 from app.config import (
     BACKEND_DIR,
@@ -41,6 +46,9 @@ _CHINESE_SEPARATORS = ["\n\n", "\n", "。", "！", "？", "；", "，", "、", "
 # 单个片段的目标字符数与重叠，按文档密度和 embedding 上下文调整
 _CHUNK_SIZE = 500
 _CHUNK_OVERLAP = 80
+
+_KNOWLEDGE_PATTERNS = ("*.md", "*.markdown", "*.pdf")
+_ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff]")
 
 
 def _title_from_metadata(metadata: dict) -> str:
@@ -74,6 +82,39 @@ def _destination_from_metadata(metadata: dict) -> str:
     return ""
 
 
+def _clean_markdown_text(text: str) -> str:
+    """在结构切分前做保守清洗，不破坏 Markdown 标题和列表。"""
+    text = unicodedata.normalize("NFKC", text)
+    text = _ZERO_WIDTH_RE.sub("", text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = "\n".join(line.rstrip() for line in text.splitlines())
+    return re.sub(r"\n{4,}", "\n\n\n", text).strip()
+
+
+def _destination_from_pdf(text: str, source_name: str) -> str:
+    first_lines = [line.strip() for line in text.splitlines() if line.strip()][:5]
+    for line in first_lines:
+        destination = _destination_from_metadata({"h1": line})
+        if destination:
+            return destination
+
+    stem = re.sub(
+        r"(?:[_-]?guide|[_-]?攻略|[_-]?旅游指南|[_-]?旅行指南)$",
+        "",
+        source_name.rsplit(".", 1)[0],
+        flags=re.IGNORECASE,
+    )
+    return stem.strip(" _-")
+
+
+def _title_from_pdf_page(text: str, page_number: int) -> str:
+    for line in text.splitlines():
+        candidate = line.strip(" #\t")
+        if 2 <= len(candidate) <= 60:
+            return candidate
+    return f"第 {page_number} 页"
+
+
 def _split_markdown_into_chunks(
     markdown_text: str,
     source_name: str,
@@ -81,6 +122,7 @@ def _split_markdown_into_chunks(
     chunk_overlap: int = _CHUNK_OVERLAP,
 ) -> list[dict[str, str]]:
     """先按标题结构切分并保留层级，再对过长片段做带重叠的二次切分。"""
+    markdown_text = _clean_markdown_text(markdown_text)
     header_splitter = MarkdownHeaderTextSplitter(
         headers_to_split_on=_HEADERS_TO_SPLIT_ON,
         strip_headers=True,  # 正文去掉 # 标题行，标题改由 metadata 承载，避免重复
@@ -121,9 +163,55 @@ def _split_markdown_into_chunks(
     return chunks
 
 
-def _build_chunk_id(source: str, title: str, text: str) -> str:
+def _split_pdf_into_chunks(
+    pdf_path: Path,
+    chunk_size: int = _CHUNK_SIZE,
+    chunk_overlap: int = _CHUNK_OVERLAP,
+) -> list[dict[str, Any]]:
+    """按页保留来源信息，再在页内按中文标点递归切分。"""
+    pages = load_pdf_pages(pdf_path)
+    size_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=_CHINESE_SEPARATORS,
+        keep_separator=True,
+    )
+
+    document_sample = "\n".join(str(page["text"]) for page in pages[:3])
+    destination = _destination_from_pdf(document_sample, pdf_path.name)
+    chunks: list[dict[str, Any]] = []
+    for page in pages:
+        page_text = str(page["text"]).strip()
+        page_number = int(page["page_start"])
+        title = _title_from_pdf_page(page_text, page_number)
+        for piece in size_splitter.split_text(page_text):
+            piece = piece.strip()
+            if not piece:
+                continue
+            chunks.append(
+                {
+                    "title": title,
+                    "breadcrumb": f"{title} > 第 {page_number} 页",
+                    "text": piece,
+                    "source": pdf_path.name,
+                    "destination": destination,
+                    "page_start": page_number,
+                    "page_end": int(page["page_end"]),
+                    "parser": str(page["parser"]),
+                }
+            )
+    return chunks
+
+
+def _build_chunk_id(
+    source: str,
+    title: str,
+    text: str,
+    page_start: int = 0,
+) -> str:
     """基于 source、title 和 text 生成稳定片段 ID。"""
-    digest = md5(f"{source}|{title}|{text}".encode("utf-8")).hexdigest()
+    page_part = f"|page={page_start}" if page_start else ""
+    digest = md5(f"{source}|{title}|{text}{page_part}".encode("utf-8")).hexdigest()
     return f"{source}_{digest}"
 
 
@@ -142,36 +230,61 @@ def _build_document_text(chunk: dict[str, str]) -> str:
 def load_guide_chunks() -> list[dict[str, str]]:
     """读取 backend/data 下的攻略文件，并切分成可检索片段。单个文件失败不影响整体。"""
     chunks: list[dict[str, str]] = []
+    seen_fingerprints: set[str] = set()
 
     guide_files = sorted(
         {
             path
-            for pattern in ("*.md", "*.markdown")
+            for pattern in _KNOWLEDGE_PATTERNS
             for path in DATA_DIR.glob(pattern)
         }
     )
 
     for guide_file in guide_files:
         try:
-            text = guide_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
+            if guide_file.suffix.lower() == ".pdf":
+                raw_chunks = _split_pdf_into_chunks(guide_file)
+            else:
+                text = guide_file.read_text(encoding="utf-8")
+                raw_chunks = _split_markdown_into_chunks(text, guide_file.name)
+        except (OSError, UnicodeDecodeError, RuntimeError, ValueError) as exc:
             logger.warning(
-                "[RAG] 跳过无法读取的知识库文件 file=%s error_type=%s",
+                "[RAG] 跳过无法解析的知识库文件 file=%s error_type=%s message=%s",
                 guide_file.name,
                 type(exc).__name__,
+                exc,
             )
             continue
 
-        raw_chunks = _split_markdown_into_chunks(text, guide_file.name)
         for chunk in raw_chunks:
+            fingerprint = md5(
+                f"{chunk['source']}|{chunk['title']}|{chunk['text']}".encode("utf-8")
+            ).hexdigest()
+            if fingerprint in seen_fingerprints:
+                logger.info(
+                    "[RAG] 跳过重复片段 file=%s title=%s",
+                    chunk["source"],
+                    chunk["title"],
+                )
+                continue
+            seen_fingerprints.add(fingerprint)
+            page_start = int(chunk.get("page_start", 0))
             chunks.append(
                 {
-                    "id": _build_chunk_id(chunk["source"], chunk["title"], chunk["text"]),
+                    "id": _build_chunk_id(
+                        chunk["source"],
+                        chunk["title"],
+                        chunk["text"],
+                        page_start=page_start,
+                    ),
                     "title": chunk["title"],
                     "text": chunk["text"],
                     "source": chunk["source"],
                     "breadcrumb": chunk.get("breadcrumb", chunk["title"]),
                     "destination": chunk.get("destination", ""),
+                    "page_start": page_start,
+                    "page_end": int(chunk.get("page_end", page_start)),
+                    "parser": chunk.get("parser", "markdown"),
                 }
             )
     return chunks
@@ -339,6 +452,9 @@ def ingest_guide_chunks_to_chroma() -> int:
             "source": chunk["source"],
             "breadcrumb": chunk.get("breadcrumb", chunk["title"]),
             "destination": chunk.get("destination", ""),
+            "page_start": chunk.get("page_start", 0),
+            "page_end": chunk.get("page_end", 0),
+            "parser": chunk.get("parser", "markdown"),
         }
         for chunk in chunks
     ]
@@ -399,6 +515,9 @@ def _search_guide_chunks_by_chroma(
                 "source": source,
                 "breadcrumb": breadcrumb,
                 "destination": metadata.get("destination", "") if metadata else "",
+                "page_start": metadata.get("page_start", 0) if metadata else 0,
+                "page_end": metadata.get("page_end", 0) if metadata else 0,
+                "parser": metadata.get("parser", "unknown") if metadata else "unknown",
             }
         )
 

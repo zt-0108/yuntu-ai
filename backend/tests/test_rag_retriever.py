@@ -22,9 +22,11 @@ def test_retrieve_travel_guide_formats_chunks_as_text(monkeypatch) -> None:
         assert destination == "大理"
         return [
             {
-                "source": "dali_guide.md",
+                "source": "dali_guide.pdf",
                 "title": "大理古城",
                 "text": "大理古城适合慢游和拍照。",
+                "page_start": 3,
+                "page_end": 3,
             }
         ], {"prompt_tokens": 0, "completion_tokens": 0}
 
@@ -44,7 +46,10 @@ def test_retrieve_travel_guide_formats_chunks_as_text(monkeypatch) -> None:
         destination="大理",
     )
 
-    assert results == ["[来源: dali_guide.md | 标题: 大理古城]\n大理古城适合慢游和拍照。"]
+    assert results == [
+        "[来源: dali_guide.pdf | 页码: 3 | 标题: 大理古城]\n"
+        "大理古城适合慢游和拍照。"
+    ]
 
 
 def test_retrieve_travel_guide_returns_empty_when_no_chunks(monkeypatch) -> None:

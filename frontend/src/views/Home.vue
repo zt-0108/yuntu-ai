@@ -18,6 +18,7 @@ interface ChatMessage {
 
 const preferenceOptions = ["自然风景", "拍照", "美食", "古镇", "休闲", "亲子", "人文"];
 const dietaryOptions = ["少辣", "不吃香菜", "不吃葱", "素食"];
+const trainTypeOptions = ["G", "D", "C", "Z", "T", "K"] as const;
 const quickPrompts = [
   "大理 3 天，想看日落和吃美食",
   "成都周末游，2 人预算 3000 元",
@@ -41,6 +42,7 @@ function addDays(dateText: string, amount: number): string {
 const today = new Date();
 const formState = reactive({
   destination: "大理",
+  departureCity: "",
   startDate: formatDate(today),
   endDate: addDays(formatDate(today), 2),
   travelers: 2,
@@ -49,6 +51,9 @@ const formState = reactive({
   pace: "轻松",
   preferences: ["自然风景", "拍照", "美食"],
   dietaryPreferences: ["少辣"],
+  preferredDeparturePeriod: "" as "" | "上午" | "下午" | "晚上",
+  preferredTrainTypes: ["G", "D"] as Array<"G" | "D" | "C" | "Z" | "T" | "K">,
+  seatPreference: "二等座" as "商务座" | "一等座" | "二等座" | "软卧" | "硬卧" | "硬座" | "无座",
   notes: "不想太早起床，希望安排一个适合看日落的地点。",
 });
 
@@ -77,6 +82,7 @@ const dayCount = computed(() => {
 
 const tripSummary = computed(() => [
   { icon: "📍", label: "目的地", value: formState.destination || "待确认" },
+  ...(formState.departureCity ? [{ icon: "🚄", label: "往返车票", value: `${formState.departureCity} ⇄ ${formState.destination}` }] : []),
   { icon: "📅", label: "日期", value: `${formState.startDate} 至 ${formState.endDate}` },
   { icon: "👥", label: "同行", value: `${formState.travelers} 人 · ${dayCount.value} 天` },
   { icon: "💰", label: "预算", value: `¥${formState.budget.toLocaleString()}` },
@@ -88,6 +94,7 @@ const generationStageLabels: Record<string, string> = {
   retrieving_context: "正在检索目的地攻略",
   planning: "正在生成每日行程",
   assembling: "正在整理预算与路线",
+  querying_rail: "正在查询往返车票",
   enriching_map: "正在补充地图信息",
   finalizing: "正在完成旅行方案",
   cancelling: "正在取消生成",
@@ -103,8 +110,14 @@ function handleGenerationProgress(job: TripGenerationJobStatus) {
 
 function parseRequest(text: string): string[] {
   const changed: string[] = [];
-  const cities = ["北京", "上海", "广州", "深圳", "杭州", "苏州", "南京", "成都", "重庆", "西安", "厦门", "青岛", "长沙", "武汉", "昆明", "大理", "丽江", "三亚", "桂林", "哈尔滨"];
-  const city = cities.find((item) => text.includes(item));
+  const cities = ["北京", "上海", "广州", "深圳", "杭州", "苏州", "扬州", "南京", "成都", "重庆", "西安", "厦门", "青岛", "长沙", "武汉", "昆明", "大理", "丽江", "三亚", "桂林", "哈尔滨"];
+  const routeMatch = text.match(new RegExp(`从?(${cities.join("|")})(?:出发)?(?:去|到|前往)(${cities.join("|")})`));
+  if (routeMatch) {
+    formState.departureCity = routeMatch[1];
+    formState.destination = routeMatch[2];
+    changed.push(`往返路线改为${routeMatch[1]}到${routeMatch[2]}`);
+  }
+  const city = routeMatch ? undefined : cities.find((item) => text.includes(item));
   if (city && city !== formState.destination) {
     formState.destination = city;
     changed.push(`目的地改为${city}`);
@@ -184,6 +197,10 @@ async function handleSubmit() {
     dietary_preferences: formState.dietaryPreferences,
     hotel_level: formState.hotelLevel,
     special_notes: formState.notes,
+    departure_city: formState.departureCity || null,
+    preferred_departure_period: formState.preferredDeparturePeriod || null,
+    preferred_train_types: formState.preferredTrainTypes,
+    seat_preference: formState.seatPreference,
   };
 
   isSubmitting.value = true;
@@ -304,6 +321,7 @@ onUnmounted(() => {
 
       <div v-if="detailsOpen" class="details-form">
         <label>目的地<input v-model="formState.destination" /></label>
+        <label>铁路出发城市（选填）<input v-model="formState.departureCity" placeholder="例如：上海" /></label>
         <div class="details-form__row">
           <label>开始日期<input v-model="formState.startDate" type="date" /></label>
           <label>结束日期<input v-model="formState.endDate" type="date" /></label>
@@ -329,6 +347,23 @@ onUnmounted(() => {
             @click="formState.dietaryPreferences = formState.dietaryPreferences.includes(item) ? formState.dietaryPreferences.filter((value) => value !== item) : [...formState.dietaryPreferences, item]"
           >{{ item }}</button>
         </div>
+        <div class="details-form__row">
+          <label>列车出发时段
+            <select v-model="formState.preferredDeparturePeriod"><option value="">不限</option><option>上午</option><option>下午</option><option>晚上</option></select>
+          </label>
+          <label>优先席别
+            <select v-model="formState.seatPreference"><option>商务座</option><option>一等座</option><option>二等座</option><option>软卧</option><option>硬卧</option><option>硬座</option><option>无座</option></select>
+          </label>
+        </div>
+        <div class="block-label">优先车次类型</div>
+        <div class="tag-list tag-list--small">
+          <button
+            v-for="item in trainTypeOptions"
+            :key="item"
+            :class="{ active: formState.preferredTrainTypes.includes(item) }"
+            @click="formState.preferredTrainTypes = formState.preferredTrainTypes.includes(item) ? formState.preferredTrainTypes.filter((value) => value !== item) : [...formState.preferredTrainTypes, item]"
+          >{{ item }}</button>
+        </div>
       </div>
 
       <div v-if="isSubmitting" class="generation-progress" aria-live="polite">
@@ -347,7 +382,7 @@ onUnmounted(() => {
       <button class="generate-button" :disabled="isSubmitting" @click="handleSubmit">
         <span>{{ isSubmitting ? "正在规划旅程…" : lastGenerationFailed ? "重新生成旅行方案" : "生成我的旅行方案" }}</span><span v-if="!isSubmitting">→</span>
       </button>
-      <div class="privacy-note">🔒 你的旅行偏好仅用于本次行程规划</div>
+      <div class="privacy-note">🔒 仅查询公开车次信息，不收集 12306 账号、密码或乘车人身份信息</div>
     </aside>
   </section>
 </template>

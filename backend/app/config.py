@@ -80,3 +80,11 @@ AMAP_BASE_URL = os.getenv("AMAP_BASE_URL", "https://restapi.amap.com/v3")
 AMAP_DEFAULT_CITY = os.getenv("AMAP_DEFAULT_CITY", "")
 AMAP_TIMEOUT_SECONDS = int(os.getenv("AMAP_TIMEOUT_SECONDS", "20"))
 ENABLE_AMAP_ENRICHMENT = os.getenv("ENABLE_AMAP_ENRICHMENT", "false").lower() == "true"
+
+
+# 12306 MCP / 铁路查询配置（只查询，不登录、不下单）
+ENABLE_RAIL_MCP = os.getenv("ENABLE_RAIL_MCP", "false").lower() == "true"
+RAIL_MCP_URL = os.getenv("RAIL_MCP_URL", "http://127.0.0.1:8001/mcp")
+RAIL_MCP_TIMEOUT_SECONDS = float(os.getenv("RAIL_MCP_TIMEOUT_SECONDS", "12"))
+RAIL_MCP_CACHE_TTL_SECONDS = int(os.getenv("RAIL_MCP_CACHE_TTL_SECONDS", "60"))
+RAIL_MCP_MAX_RESULTS = max(1, min(int(os.getenv("RAIL_MCP_MAX_RESULTS", "3")), 10))

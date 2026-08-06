@@ -9,6 +9,10 @@ export interface TripRequestPayload {
   dietary_preferences: string[];
   hotel_level?: string | null;
   special_notes?: string | null;
+  departure_city?: string | null;
+  preferred_departure_period?: "上午" | "下午" | "晚上" | null;
+  preferred_train_types: Array<"G" | "D" | "C" | "Z" | "T" | "K">;
+  seat_preference?: "商务座" | "一等座" | "二等座" | "软卧" | "硬卧" | "硬座" | "无座" | null;
 }
 
 export type TripGenerationJobState =
@@ -115,6 +119,36 @@ export interface Itinerary {
   tips: string[];
   source_notes: string[];
   provenance?: ItineraryProvenance;
+  rail_tickets?: RailTicketPlan;
+}
+
+export interface RailTicketOption {
+  train_code: string;
+  travel_date: string;
+  departure_station: string;
+  arrival_station: string;
+  departure_time: string;
+  arrival_time: string;
+  duration: string;
+  duration_minutes?: number | null;
+  seats: Record<string, string>;
+  prices: Record<string, number>;
+  preferred_seat?: string | null;
+  preferred_seat_availability?: string | null;
+  preferred_seat_price?: number | null;
+}
+
+export interface RailTicketPlan {
+  status: "available" | "unavailable" | "error" | "disabled";
+  departure_city?: string | null;
+  destination?: string | null;
+  outbound: RailTicketOption[];
+  return_trip: RailTicketOption[];
+  queried_at?: string | null;
+  source_name: string;
+  source_url: string;
+  disclaimer: string;
+  message?: string | null;
 }
 
 export interface ItineraryProvenance {
@@ -124,6 +158,7 @@ export interface ItineraryProvenance {
   map_status: "pending" | "verified" | "partial" | "unavailable" | "disabled" | "unknown";
   map_verified_spots: number;
   map_total_spots: number;
+  rail_status: "available" | "unavailable" | "error" | "disabled" | "unknown";
   budget_is_estimate: boolean;
 }
 

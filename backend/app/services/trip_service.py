@@ -25,6 +25,7 @@ from app.models.schemas import (
     TripRequest,
 )
 from app.services.map_service import enrich_itinerary_with_map_data
+from app.services.rail_service import query_round_trip_tickets
 
 
 logger = logging.getLogger(__name__)
@@ -576,9 +577,17 @@ def generate_trip_itinerary(
         ),
         token_usage=token_usage,
     )
-    logger.info("[3/4 行程组装] 完成 days=%s", len(itinerary.days))
+    logger.info("[3/5 行程组装] 完成 days=%s", len(itinerary.days))
+    _report_progress(progress_callback, "querying_rail", 78)
+    logger.info(
+        "[4/5 铁路查询] 开始 departure=%s destination=%s",
+        request.departure_city,
+        request.destination,
+    )
+    itinerary.rail_tickets = query_round_trip_tickets(request)
+    itinerary.provenance.rail_status = itinerary.rail_tickets.status
     _report_progress(progress_callback, "enriching_map", 85)
-    logger.info("[4/4 地图补全] 开始 enabled=%s", ENABLE_AMAP_ENRICHMENT)
+    logger.info("[5/5 地图补全] 开始 enabled=%s", ENABLE_AMAP_ENRICHMENT)
     itinerary = _maybe_enrich_itinerary_with_map_data(
         itinerary,
         city=request.destination,

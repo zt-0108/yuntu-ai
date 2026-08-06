@@ -46,6 +46,7 @@ pnpm-debug.log*
 
 # Exported local files
 *.pdf
+!backend/data/*_guide.pdf
 *.docx
 *.xlsx
 
