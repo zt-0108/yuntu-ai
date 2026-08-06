@@ -302,7 +302,34 @@ Redis 默认关闭。本地单用户使用可以保持：
 REDIS_ENABLED=false
 ```
 
-铁路查询默认关闭。启动兼容 Streamable HTTP 的 `mcp-server-12306` 后，可在后端 `.env` 中配置：
+铁路查询默认关闭。它依赖第三方 [`mcp-server-12306`](https://github.com/drfccv/mcp-server-12306)，建议通过 `uvx` 在独立环境中运行，避免和项目后端的 Python 依赖互相影响。
+
+在一个单独的 PowerShell 窗口启动 Streamable HTTP 服务：
+
+```powershell
+cd D:\path\to\yuntu-ai
+$env:SERVER_HOST="127.0.0.1"
+$env:SERVER_PORT="8001"
+uvx --from "mcp-server-12306[http]" mcp-12306
+```
+
+这里的 PyPI 包名是 `mcp-server-12306`，HTTP 可执行入口是 `mcp-12306`。不要使用最后一个单词同名的 `mcp-server-12306` 命令，因为它启动的是 stdio 模式，不是本项目需要的 HTTP 模式。
+
+服务启动后，在另一个 PowerShell 窗口检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8001/health
+```
+
+健康检查应返回 `status: healthy`，MCP 端点为 `http://127.0.0.1:8001/mcp`。如果启动时报 `WinError 10048`，说明 8001 端口已有服务监听；先访问健康检查，已有实例正常时无需重复启动。
+
+也可以使用 Docker，并把容器的 8000 端口映射到本机 8001：
+
+```powershell
+docker run -d -p 8001:8000 --name mcp-server-12306 drfccv/mcp-server-12306:latest
+```
+
+确认 MCP 正常运行后，在后端 `.env` 中配置：
 
 ```dotenv
 ENABLE_RAIL_MCP=true
