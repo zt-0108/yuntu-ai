@@ -48,11 +48,12 @@
 | 需求输入 | 对话式快速输入 + 结构化详细设置 |
 | 行程生成 | qwen-max / OpenAI-compatible Chat API + LangChain 结构化输出 |
 | 后台任务 | 创建任务、进度轮询、取消、失败重试、重复请求复用 |
-| 本地知识 | Markdown 攻略、Chroma 向量检索、城市过滤、距离阈值 |
+| 本地知识 | Markdown/PDF 攻略、入库清洗、Chroma 向量检索、城市过滤、距离阈值 |
 | 检索优化 | LLM Query Rewrite、text-embedding-v4、qwen3-rerank、最低相关分 |
 | 无知识城市 | RAG 返回空上下文，规划模型使用自身通用知识继续生成 |
 | 地图增强 | 高德 POI、地理编码、坐标、图片、路线距离与耗时 |
 | 天气 | 结果页独立请求高德天气预报 |
+| 铁路查询 | 可选 12306 MCP，查询去程/返程候选车次、余票和票价，不处理登录或购票 |
 | 来源说明 | 显示规划来源、RAG 命中数、地图匹配数和费用估算声明 |
 | 智能编辑 | 使用自然语言调整指定日期，失败时回退到规则编辑 |
 | 历史记录 | SQLite 保存、列表、详情、删除 |
@@ -113,7 +114,7 @@ queued
 3. 使用 qwen3-rerank 重新排序；
 4. 丢弃低于重排最低分的片段。
 
-如果查询苏州等未收录城市，RAG 会返回空列表，不会再混入其他城市的攻略。
+如果查询合肥等未收录城市，RAG 会返回空列表，不会再混入其他城市的攻略。
 
 ### 3. LLM 规划
 
@@ -169,9 +170,10 @@ queued
 | `map_status` | 高德地点信息全部匹配、部分匹配、不可用或未启用 |
 | `map_verified_spots` | 已获得高德地点信息的景点数量 |
 | `map_total_spots` | 行程中的景点总数 |
+| `rail_status` | 往返铁路查询可用、无结果、失败或未启用 |
 | `budget_is_estimate` | 费用是否属于估算值 |
 
-例如，苏州没有本地攻略时，结果页会显示：
+例如，合肥没有本地攻略时，结果页会显示：
 
 ```text
 规划来源：AI 通用知识
@@ -211,6 +213,7 @@ queued
   - `qwen3-rerank`
 - 高德地图 Web 服务
 - 高德地图 JavaScript API
+- 可选的第三方 `mcp-server-12306` 查询服务
 
 模型和 Embedding 也可以替换为兼容 OpenAI API 协议的服务。
 
@@ -226,7 +229,7 @@ yuntu-ai/
 │  │  ├─ models/                    Pydantic 与 SQLAlchemy 模型
 │  │  ├─ rag/                       文档切分、Chroma、检索与重排
 │  │  └─ services/                  行程、任务、地图、天气、存储、导出
-│  ├─ data/                         本地 Markdown 攻略
+│  ├─ data/                         本地 Markdown/PDF 攻略
 │  ├─ eval/                         RAG 评估样例
 │  ├─ scripts/                      调试和真实服务验证脚本
 │  ├─ tests/                        后端自动化测试
@@ -299,6 +302,18 @@ Redis 默认关闭。本地单用户使用可以保持：
 REDIS_ENABLED=false
 ```
 
+铁路查询默认关闭。启动兼容 Streamable HTTP 的 `mcp-server-12306` 后，可在后端 `.env` 中配置：
+
+```dotenv
+ENABLE_RAIL_MCP=true
+RAIL_MCP_URL=http://127.0.0.1:8001/mcp
+RAIL_MCP_TIMEOUT_SECONDS=12
+RAIL_MCP_CACHE_TTL_SECONDS=60
+RAIL_MCP_MAX_RESULTS=3
+```
+
+该集成只调用车次和票价查询工具，不接收 12306 账号、密码、Cookie、乘车人身份信息，也不执行登录、下单或支付。第三方 MCP 返回的数据仅供规划参考，最终余票与价格以铁路12306官方渠道为准。
+
 ### 3. 初始化或重建知识库
 
 首次运行，或修改 `backend/data/` 下的攻略后执行：
@@ -307,7 +322,9 @@ REDIS_ENABLED=false
 .\venv\Scripts\python.exe -m app.reingest
 ```
 
-该命令会删除旧的 `travel_guides` collection，并使用当前 Markdown 文件重新生成向量。
+该命令会删除旧的 `travel_guides` collection，并使用当前 Markdown/PDF 文件重新生成向量。
+
+PDF 入库使用 PyMuPDF。系统会在切分前清理重复页眉、页脚、页码、异常字符和版面硬换行，并为片段保留原始页码。文本型 PDF 可以直接放入 `backend/data/`；扫描型 PDF 会尝试调用本机 Tesseract OCR，中文扫描件需要额外安装 `chi_sim` 中文语言包。OCR 不可用或文档加密时，该文件会被跳过并在日志中给出原因，不会写入空片段。
 
 ### 4. 启动后端
 
@@ -367,6 +384,11 @@ Vite 使用固定端口 `5173`。如果端口已被占用，启动会直接报�
 | `RAG_MIN_CROSS_ENCODER_SCORE` | `0.20` | Cross-encoder 最低保留分 |
 | `RAG_MIN_RULE_RERANK_SCORE` | `1` | 规则重排最低保留分 |
 | `ENABLE_AMAP_ENRICHMENT` | `false` | 是否启用后端地图增强 |
+| `ENABLE_RAIL_MCP` | `false` | 是否查询往返铁路候选车次 |
+| `RAIL_MCP_URL` | `http://127.0.0.1:8001/mcp` | 第三方 12306 MCP Streamable HTTP 地址 |
+| `RAIL_MCP_TIMEOUT_SECONDS` | `12` | 单次往返铁路查询的总超时 |
+| `RAIL_MCP_CACHE_TTL_SECONDS` | `60` | 相同查询的内存缓存秒数 |
+| `RAIL_MCP_MAX_RESULTS` | `3` | 去程和返程各自最多展示的车次数 |
 | `REDIS_ENABLED` | `false` | 是否启用 Redis 缓存 |
 | `CORS_ORIGINS` | 本地常用地址 | 允许访问后端的前端来源 |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
@@ -470,10 +492,10 @@ cd backend
 当前回归结果：
 
 ```text
-58 passed
+64 passed
 ```
 
-测试默认隔离 LLM、RAG、高德和开发数据库，不会产生付费调用，也不会把测试行程写入历史列表。
+测试默认隔离 LLM、RAG、高德、12306 MCP 和开发数据库，不会产生付费调用，也不会把测试行程写入历史列表。
 
 ### 前端
 

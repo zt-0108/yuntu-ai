@@ -24,6 +24,25 @@ class TripRequest(BaseModel):
     )
     hotel_level: str | None = Field(default=None, max_length=50, description="酒店档次偏好")
     special_notes: str | None = Field(default=None, max_length=2000, description="额外要求")
+    departure_city: str | None = Field(default=None, max_length=100, description="铁路出发城市")
+    preferred_departure_period: Literal["上午", "下午", "晚上"] | None = Field(
+        default=None,
+        description="偏好的列车出发时段",
+    )
+    preferred_train_types: list[Literal["G", "D", "C", "Z", "T", "K"]] = Field(
+        default_factory=list,
+        max_length=6,
+        description="偏好的车次类型",
+    )
+    seat_preference: Literal[
+        "商务座",
+        "一等座",
+        "二等座",
+        "软卧",
+        "硬卧",
+        "硬座",
+        "无座",
+    ] | None = Field(default="二等座", description="偏好的席别")
 
     @model_validator(mode="after")
     def validate_travel_dates(self) -> "TripRequest":
@@ -173,6 +192,39 @@ class TokenUsage(BaseModel):
         return self.total_prompt_tokens + self.total_completion_tokens
 
 
+class RailTicketOption(BaseModel):
+    """标准化后的候选车次。"""
+
+    train_code: str
+    travel_date: DateType
+    departure_station: str
+    arrival_station: str
+    departure_time: str
+    arrival_time: str
+    duration: str
+    duration_minutes: int | None = Field(default=None, ge=0)
+    seats: dict[str, str] = Field(default_factory=dict)
+    prices: dict[str, float] = Field(default_factory=dict)
+    preferred_seat: str | None = None
+    preferred_seat_availability: str | None = None
+    preferred_seat_price: float | None = Field(default=None, ge=0)
+
+
+class RailTicketPlan(BaseModel):
+    """往返铁路查询结果；查询结果不代表预订。"""
+
+    status: Literal["available", "unavailable", "error", "disabled"] = "disabled"
+    departure_city: str | None = None
+    destination: str | None = None
+    outbound: list[RailTicketOption] = Field(default_factory=list)
+    return_trip: list[RailTicketOption] = Field(default_factory=list)
+    queried_at: datetime | None = None
+    source_name: str = "12306 MCP（第三方开源服务）"
+    source_url: str = "https://github.com/drfccv/mcp-server-12306"
+    disclaimer: str = "余票与票价会实时变化，仅供行程规划参考，请以铁路12306官方渠道为准。"
+    message: str | None = None
+
+
 class ItineraryProvenance(BaseModel):
     """行程内容的数据来源与外部验证情况。"""
 
@@ -194,6 +246,13 @@ class ItineraryProvenance(BaseModel):
     ] = "unknown"
     map_verified_spots: int = Field(default=0, ge=0)
     map_total_spots: int = Field(default=0, ge=0)
+    rail_status: Literal[
+        "available",
+        "unavailable",
+        "error",
+        "disabled",
+        "unknown",
+    ] = "unknown"
     budget_is_estimate: bool = True
 
 
@@ -214,6 +273,10 @@ class Itinerary(BaseModel):
     provenance: ItineraryProvenance = Field(
         default_factory=ItineraryProvenance,
         description="行程规划、RAG 与地图验证的来源信息",
+    )
+    rail_tickets: RailTicketPlan = Field(
+        default_factory=RailTicketPlan,
+        description="往返铁路候选车次，仅用于查询与规划",
     )
     token_usage: TokenUsage | None = Field(default=None, description="LLM token 消耗统计")
 

@@ -361,8 +361,18 @@ def retrieve_travel_guide(
 
     results: list[str] = []
     for chunk in matched_chunks:
+        page_start = int(chunk.get("page_start", 0) or 0)
+        page_end = int(chunk.get("page_end", page_start) or page_start)
+        page_label = ""
+        if page_start:
+            page_label = (
+                f" | 页码: {page_start}"
+                if page_end == page_start
+                else f" | 页码: {page_start}-{page_end}"
+            )
         results.append(
-            f"[来源: {chunk['source']} | 标题: {chunk['title']}]\n{chunk['text']}"
+            f"[来源: {chunk['source']}{page_label} | 标题: {chunk['title']}]\n"
+            f"{chunk['text']}"
         )
 
     set_cached_json(cache_key, results, expire_seconds=REDIS_RAG_TTL_SECONDS)

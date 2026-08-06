@@ -45,6 +45,10 @@ function formatShortDate(dateText?: string | null): string {
   return `${parts[1]}-${parts[2]}`;
 }
 
+function formatRailPrice(value?: number | null): string {
+  return value == null ? "价格待查" : `¥${value.toFixed(0)}`;
+}
+
 function formatWeatherDate(dateText?: string | null, week?: string | null): string {
   const weekdayMap: Record<string, string> = {
     "1": "周一",
@@ -216,10 +220,19 @@ const provenanceItems = computed(() => {
         ? ["未启用", "本次没有调用高德地图增强。", "neutral"]
         : ["未匹配", "暂未获得可靠的高德地点信息。", "warning"];
 
+  const railText = provenance.rail_status === "available"
+    ? ["已查询", "已获取往返候选车次；余票与票价请以铁路12306官方渠道为准。", "success"]
+    : provenance.rail_status === "disabled"
+      ? ["未启用", "填写出发城市且启用铁路 MCP 后可查询候选车次。", "neutral"]
+      : provenance.rail_status === "error"
+        ? ["暂不可用", "铁路查询失败，但不影响本次行程内容。", "warning"]
+        : ["暂无车次", "当前筛选条件下没有匹配的候选车次。", "warning"];
+
   return [
     { key: "planning", icon: "AI", label: "规划来源", value: planningText[0], detail: planningText[1], tone: provenance.planning_source === "rule_fallback" ? "warning" : "success" },
     { key: "rag", icon: "R", label: "本地知识", value: ragText[0], detail: ragText[1], tone: ragText[2] },
     { key: "map", icon: "⌖", label: "地图核验", value: mapText[0], detail: mapText[1], tone: mapText[2] },
+    { key: "rail", icon: "🚄", label: "铁路车次", value: railText[0], detail: railText[1], tone: railText[2] },
     { key: "budget", icon: "¥", label: "费用信息", value: "估算值", detail: "门票、住宿、餐饮和交通费用仅供规划参考，请以下单时价格为准。", tone: "neutral" },
   ];
 });
@@ -407,6 +420,39 @@ async function handleEdit() {
     </nav>
 
     <div class="result-grid">
+      <section v-if="itinerary.rail_tickets" class="result-card result-card--full rail-card">
+        <div class="result-card__title"><span>🚄</span> 往返车票建议</div>
+        <div v-if="itinerary.rail_tickets.status === 'available'" class="rail-directions">
+          <div
+            v-for="direction in [{ key: 'outbound', label: '去程', items: itinerary.rail_tickets.outbound }, { key: 'return', label: '返程', items: itinerary.rail_tickets.return_trip }]"
+            :key="direction.key"
+            class="rail-direction"
+          >
+            <h3>{{ direction.label }} · {{ direction.items[0]?.travel_date || "日期待定" }}</h3>
+            <div v-if="direction.items.length" class="rail-options">
+              <article v-for="train in direction.items" :key="`${direction.key}-${train.train_code}`" class="rail-option">
+                <div class="rail-option__head"><strong>{{ train.train_code }}</strong><span>{{ train.duration }}</span></div>
+                <div class="rail-option__route">
+                  <div><b>{{ train.departure_time }}</b><span>{{ train.departure_station }}</span></div>
+                  <div class="rail-option__line">→</div>
+                  <div><b>{{ train.arrival_time }}</b><span>{{ train.arrival_station }}</span></div>
+                </div>
+                <div class="rail-option__seat">
+                  <span>{{ train.preferred_seat || "席别" }}：{{ train.preferred_seat_availability || "待查" }}</span>
+                  <strong>{{ formatRailPrice(train.preferred_seat_price) }}</strong>
+                </div>
+              </article>
+            </div>
+            <p v-else class="rail-empty">当前偏好下未找到{{ direction.label }}候选车次。</p>
+          </div>
+        </div>
+        <div v-else class="rail-empty">{{ itinerary.rail_tickets.message || "暂未获得候选车次。" }}</div>
+        <div class="rail-disclaimer">
+          {{ itinerary.rail_tickets.disclaimer }}
+          <a :href="itinerary.rail_tickets.source_url" target="_blank" rel="noopener noreferrer">数据接口说明</a>
+        </div>
+      </section>
+
       <section class="result-card overview-card">
         <div class="result-card__title"><span>✦</span> 出发前提醒</div>
         <div v-if="displayTips.length" class="overview-tips">
@@ -1059,6 +1105,28 @@ async function handleEdit() {
   color: #2f4fa5;
 }
 
+.rail-directions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.rail-direction h3 { margin: 0 0 12px; color: #344054; font-size: 15px; }
+.rail-options { display: grid; gap: 10px; }
+.rail-option { padding: 14px; border: 1px solid #e5e9f2; border-radius: 16px; background: #fbfcff; }
+.rail-option__head, .rail-option__seat { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.rail-option__head strong { color: #4e63c9; font-size: 18px; }
+.rail-option__head span, .rail-option__seat { color: #667085; font-size: 12px; }
+.rail-option__route { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; margin: 14px 0; text-align: center; }
+.rail-option__route div:not(.rail-option__line) { display: grid; gap: 3px; }
+.rail-option__route b { color: #263248; font-size: 20px; }
+.rail-option__route span { color: #667085; font-size: 12px; }
+.rail-option__line { color: #8794d8; }
+.rail-option__seat strong { color: #d65d35; font-size: 15px; }
+.rail-empty { padding: 18px; border-radius: 14px; color: #667085; background: #f7f8fb; }
+.rail-disclaimer { margin-top: 14px; color: #8a93a3; font-size: 12px; line-height: 1.7; }
+.rail-disclaimer a { margin-left: 8px; color: #5b6dcc; }
+
 .point-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1225,6 +1293,7 @@ async function handleEdit() {
   .action-dock { align-items: stretch; flex-direction: column; }
   .action-dock__right { display: grid; grid-template-columns: repeat(2,1fr); }
   .action-dock button { width: 100%; }
+  .rail-directions { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
