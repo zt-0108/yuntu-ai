@@ -44,6 +44,7 @@ def test_vector_search_filters_by_destination_and_distance(monkeypatch) -> None:
             assert kwargs["where"] == {"destination": "大理"}
             assert "distances" in kwargs["include"]
             return {
+                "ids": [["chunk-dali-old-city", "chunk-dali-weak"]],
                 "documents": [["大理 > 景点\n大理古城适合慢游。", "大理 > 其他\n弱相关内容。"]],
                 "metadatas": [[
                     {
@@ -77,7 +78,42 @@ def test_vector_search_filters_by_destination_and_distance(monkeypatch) -> None:
     )
 
     assert [item["title"] for item in results] == ["大理古城"]
+    assert [item["id"] for item in results] == ["chunk-dali-old-city"]
     assert usage == {"prompt_tokens": 2, "completion_tokens": 0}
+
+
+def test_vector_fallback_uses_independent_lexical_query(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        vector_db,
+        "_search_guide_chunks_by_chroma",
+        lambda **kwargs: ([], {"prompt_tokens": 0, "completion_tokens": 0}),
+    )
+
+    def fake_keyword_search(query: str, top_k: int, destination: str | None):
+        captured.update(query=query, top_k=top_k, destination=destination)
+        return [{"title": "鼓浪屿", "text": "精确词回退结果"}]
+
+    monkeypatch.setattr(
+        vector_db,
+        "_search_guide_chunks_by_keywords",
+        fake_keyword_search,
+    )
+
+    results, usage = vector_db.search_guide_chunks_with_usage(
+        query="厦门 海岛 文艺",
+        lexical_query="鼓浪屿 日光岩 票价",
+        top_k=4,
+        destination="厦门",
+    )
+
+    assert captured == {
+        "query": "鼓浪屿 日光岩 票价",
+        "top_k": 4,
+        "destination": "厦门",
+    }
+    assert results[0]["title"] == "鼓浪屿"
+    assert usage == {"prompt_tokens": 0, "completion_tokens": 0}
 
 
 def _write_text_pdf(path: Path) -> None:

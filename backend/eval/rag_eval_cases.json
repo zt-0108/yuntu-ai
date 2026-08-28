@@ -1,167 +1,539 @@
 [
   {
     "id": "dali_sunset_easy_photo",
+    "tags": ["semantic", "multi_intent"],
     "destination": "大理",
     "preferences": ["自然风景", "拍照", "美食"],
     "pace": "轻松",
     "special_notes": "不想太早起床，希望安排一个适合看日落的地点。",
+    "retrieval_query": "大理 轻松旅行 自然风景 摄影 日落 洱海 双廊 慢节奏",
+    "lexical_query": "大理 日落 傍晚 洱海 双廊 慢节奏",
+    "rerank_query": "去大理旅行，不想太早起床，希望轻松拍照，并安排洱海或双廊附近适合傍晚观景的地点。",
     "top_k": 5,
-    "expected_title_keywords": ["行程", "大理古城", "洱海", "双廊"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["大理古城", "住宿区域", "经典三日行程"],
     "required_content_keywords": ["大理", "洱海", "双廊", "傍晚", "慢节奏"],
+    "relevant_documents": [
+      {"source": "dali_guide.md", "title": "2.1 大理古城", "relevance": 2},
+      {"source": "dali_guide.md", "title": "4. 住宿区域建议", "relevance": 2},
+      {"source": "dali_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 3}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "dali_culture_slow_trip",
+    "tags": ["semantic", "multi_intent"],
     "destination": "大理",
     "preferences": ["古镇", "文化体验", "慢节奏"],
     "pace": "轻松",
     "special_notes": "想体验白族文化，不想安排太赶。",
+    "retrieval_query": "大理 白族文化 古镇 非遗 扎染 慢节奏 轻松旅行",
+    "lexical_query": "大理 白族 喜洲古镇 大理古城 周城扎染 慢节奏",
+    "rerank_query": "在大理体验白族文化、古镇和扎染，希望行程轻松，不要安排得太赶。",
     "top_k": 5,
-    "expected_title_keywords": ["喜洲", "大理古城", "行程", "目的地简介"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["喜洲古镇", "大理古城", "经典三日行程", "目的地简介"],
     "required_content_keywords": ["白族", "喜洲", "大理古城", "慢节奏"],
+    "relevant_documents": [
+      {"source": "dali_guide.md", "title": "1. 目的地简介", "relevance": 1},
+      {"source": "dali_guide.md", "title": "2.1 大理古城", "relevance": 2},
+      {"source": "dali_guide.md", "title": "2.3 喜洲古镇", "relevance": 3},
+      {"source": "dali_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 3}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "dali_food_budget",
+    "tags": ["exact_entity", "numeric"],
     "destination": "大理",
     "preferences": ["美食", "预算", "小吃"],
     "pace": "适中",
     "special_notes": "希望了解当地特色餐饮和大概花费。",
+    "retrieval_query": "大理 当地特色美食 小吃 餐饮 人均预算",
+    "lexical_query": "野生菌火锅 喜洲粑粑 白族土八碗 凉鸡米线 120元 10元",
+    "rerank_query": "大理有哪些当地特色餐饮和小吃？请重点提供野生菌火锅、喜洲粑粑等食物的人均花费。",
     "top_k": 5,
-    "expected_title_keywords": ["餐饮", "预算"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["特色餐饮与预算参考"],
     "required_content_keywords": ["野生菌火锅", "喜洲粑粑", "人均预算"],
+    "relevant_documents": [
+      {"source": "dali_guide.md", "title": "3. 特色餐饮与预算参考", "relevance": 3}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "chengdu_panda_relax",
+    "tags": ["semantic", "family"],
     "destination": "成都",
     "preferences": ["熊猫", "美食", "休闲"],
     "pace": "轻松",
     "special_notes": "带父母出行，不想太累，想看大熊猫。",
+    "retrieval_query": "成都 大熊猫 亲子 长者 休闲 慢生活 轻松行程",
+    "lexical_query": "成都 大熊猫繁育研究基地 宽窄巷子 慢生活 火锅",
+    "rerank_query": "带父母去成都，希望轻松看大熊猫，也体验宽窄巷子、美食和成都慢生活，不要太累。",
     "top_k": 5,
-    "expected_title_keywords": ["大熊猫", "行程", "宽窄巷子"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["大熊猫繁育研究基地", "宽窄巷子", "经典三日行程"],
     "required_content_keywords": ["大熊猫", "宽窄巷子", "火锅", "慢生活"],
+    "relevant_documents": [
+      {"source": "chengdu_guide.md", "title": "2.1 大熊猫繁育研究基地", "relevance": 3},
+      {"source": "chengdu_guide.md", "title": "2.2 宽窄巷子", "relevance": 2},
+      {"source": "chengdu_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 2}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "chengdu_food_deep",
+    "tags": ["exact_entity", "multi_intent"],
     "destination": "成都",
     "preferences": ["美食", "小吃", "火锅"],
     "pace": "适中",
     "special_notes": "是个吃货，想把成都特色美食都尝一遍。",
+    "retrieval_query": "成都 特色美食 火锅 小吃 深度体验 餐饮预算",
+    "lexical_query": "火锅 串串香 担担面 兔头 甜水面 蛋烘糕 人均预算",
+    "rerank_query": "想集中体验成都特色美食，包括火锅、串串香、担担面和兔头，并了解大概的人均预算。",
     "top_k": 5,
-    "expected_title_keywords": ["餐饮", "宽窄巷子", "行程"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["特色餐饮与预算参考", "经典三日行程"],
     "required_content_keywords": ["火锅", "串串香", "担担面", "兔头", "人均预算"],
+    "relevant_documents": [
+      {"source": "chengdu_guide.md", "title": "3. 特色餐饮与预算参考", "relevance": 3},
+      {"source": "chengdu_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 1}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "chengdu_dujiangyan_nature",
+    "tags": ["exact_entity", "multi_intent"],
     "destination": "成都",
     "preferences": ["自然风景", "徒步", "文化"],
     "pace": "适中",
     "special_notes": "想去都江堰和青城山，喜欢户外徒步。",
+    "retrieval_query": "成都 都江堰 青城山 自然风景 徒步 道教 水利工程",
+    "lexical_query": "都江堰 青城山 鱼嘴分水堤 宝瓶口 道教 徒步",
+    "rerank_query": "成都行程想同时去都江堰和青城山，了解水利工程、道教文化以及适合徒步的安排。",
     "top_k": 5,
-    "expected_title_keywords": ["都江堰", "青城山", "行程"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["都江堰", "青城山", "经典三日行程"],
     "required_content_keywords": ["都江堰", "青城山", "道教", "徒步", "水利工程"],
+    "relevant_documents": [
+      {"source": "chengdu_guide.md", "title": "2.4 都江堰", "relevance": 3},
+      {"source": "chengdu_guide.md", "title": "2.5 青城山", "relevance": 3},
+      {"source": "chengdu_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 2}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "xian_history_culture",
+    "tags": ["semantic", "multi_intent"],
     "destination": "西安",
     "preferences": ["历史", "文化", "古迹"],
     "pace": "适中",
     "special_notes": "对历史文化很感兴趣，想深度了解古都文化。",
+    "retrieval_query": "西安 古都 历史文化 秦代 唐代 古迹 博物馆 城墙",
+    "lexical_query": "秦始皇兵马俑 西安城墙 大雁塔 玄奘 陕西历史博物馆",
+    "rerank_query": "想深度了解西安从秦到唐的古都历史，重点关注兵马俑、城墙、大雁塔和陕西历史博物馆。",
     "top_k": 5,
-    "expected_title_keywords": ["兵马俑", "城墙", "历史博物馆", "行程"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["兵马俑", "西安城墙", "大雁塔", "陕西历史博物馆"],
     "required_content_keywords": ["兵马俑", "城墙", "玄奘", "历史", "唐代"],
+    "relevant_documents": [
+      {"source": "xian_guide.md", "title": "2.1 秦始皇兵马俑博物馆", "relevance": 3},
+      {"source": "xian_guide.md", "title": "2.2 西安城墙", "relevance": 2},
+      {"source": "xian_guide.md", "title": "2.3 大雁塔", "relevance": 2},
+      {"source": "xian_guide.md", "title": "2.5 陕西历史博物馆", "relevance": 3}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "xian_food_night",
+    "tags": ["exact_entity", "night"],
     "destination": "西安",
     "preferences": ["美食", "小吃", "夜市"],
     "pace": "适中",
     "special_notes": "想逛回民街，吃遍西安特色小吃。",
+    "retrieval_query": "西安 回民街 夜间 美食街 特色面食 小吃",
+    "lexical_query": "回民街 肉夹馍 羊肉泡馍 biangbiang面 凉皮 甑糕",
+    "rerank_query": "晚上想逛西安回民街，并集中品尝肉夹馍、羊肉泡馍、biangbiang面等特色小吃。",
     "top_k": 5,
-    "expected_title_keywords": ["回民街", "餐饮", "行程"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["回民街", "特色餐饮与预算参考"],
     "required_content_keywords": ["肉夹馍", "羊肉泡馍", "biangbiang面", "回民街"],
+    "relevant_documents": [
+      {"source": "xian_guide.md", "title": "2.4 回民街", "relevance": 3},
+      {"source": "xian_guide.md", "title": "3. 特色餐饮与预算参考", "relevance": 3}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "xian_family_study",
+    "tags": ["semantic", "family"],
     "destination": "西安",
     "preferences": ["亲子", "研学", "文化"],
     "pace": "轻松",
     "special_notes": "带孩子去，希望有教育意义，不要太赶。",
+    "retrieval_query": "西安 亲子研学 历史教育 博物馆 讲解 轻松旅行",
+    "lexical_query": "兵马俑 陕西历史博物馆 讲解员 讲解器 亲子研学",
+    "rerank_query": "带孩子去西安做轻松的历史研学，希望安排兵马俑和博物馆，并找到有讲解价值的内容。",
     "top_k": 5,
-    "expected_title_keywords": ["兵马俑", "历史博物馆", "行程"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["兵马俑", "陕西历史博物馆", "经典三日行程"],
     "required_content_keywords": ["兵马俑", "博物馆", "讲解", "历史"],
+    "relevant_documents": [
+      {"source": "xian_guide.md", "title": "2.1 秦始皇兵马俑博物馆", "relevance": 3},
+      {"source": "xian_guide.md", "title": "2.5 陕西历史博物馆", "relevance": 3},
+      {"source": "xian_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 2}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "xiamen_couple_relax",
+    "tags": ["semantic", "multi_intent"],
     "destination": "厦门",
     "preferences": ["海岛", "文艺", "美食"],
     "pace": "轻松",
     "special_notes": "和对象一起去，想去鼓浪屿和有情调的地方。",
+    "retrieval_query": "厦门 情侣 海岛 文艺 咖啡馆 慢旅行 浪漫",
+    "lexical_query": "鼓浪屿 曾厝垵 咖啡馆 文艺小店 沙茶面",
+    "rerank_query": "情侣去厦门轻松旅行，想逛鼓浪屿和有文艺氛围、咖啡馆与小吃的地方。",
     "top_k": 5,
-    "expected_title_keywords": ["鼓浪屿", "行程", "曾厝垵"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["鼓浪屿", "曾厝垵", "经典三日行程"],
     "required_content_keywords": ["鼓浪屿", "文艺", "沙茶面", "咖啡"],
+    "relevant_documents": [
+      {"source": "xiamen_guide.md", "title": "2.1 鼓浪屿", "relevance": 3},
+      {"source": "xiamen_guide.md", "title": "2.5 曾厝垵", "relevance": 2},
+      {"source": "xiamen_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 2}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "xiamen_photo_culture",
+    "tags": ["exact_entity", "multi_intent"],
     "destination": "厦门",
     "preferences": ["拍照", "文化", "建筑"],
     "pace": "适中",
     "special_notes": "喜欢拍照，想打卡厦门大学和南普陀寺。",
+    "retrieval_query": "厦门 建筑 摄影 校园 佛教文化 拍照",
+    "lexical_query": "厦门大学 南普陀寺 嘉庚建筑 芙蓉隧道 五老峰",
+    "rerank_query": "想在厦门拍建筑和校园，重点打卡厦门大学、芙蓉隧道与南普陀寺。",
     "top_k": 5,
-    "expected_title_keywords": ["厦门大学", "南普陀", "鼓浪屿"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["厦门大学", "南普陀寺", "经典三日行程"],
     "required_content_keywords": ["厦门大学", "南普陀寺", "芙蓉隧道", "拍照"],
+    "relevant_documents": [
+      {"source": "xiamen_guide.md", "title": "2.2 南普陀寺", "relevance": 3},
+      {"source": "xiamen_guide.md", "title": "2.3 厦门大学", "relevance": 3},
+      {"source": "xiamen_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 2}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "xiamen_bike_sea",
+    "tags": ["semantic", "activity"],
     "destination": "厦门",
     "preferences": ["骑行", "海景", "休闲"],
     "pace": "轻松",
     "special_notes": "想在海边骑车，看日落，放松一下。",
+    "retrieval_query": "厦门 海滨 自行车 骑行 日落 沙滩 休闲",
+    "lexical_query": "环岛路 骑行 31公里 白城沙滩 胡里山炮台 日落",
+    "rerank_query": "想在厦门海边轻松骑车看日落，了解环岛路沿途沙滩与适合安排的时间。",
     "top_k": 5,
-    "expected_title_keywords": ["环岛路", "行程", "曾厝垵"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["环岛路", "经典三日行程"],
     "required_content_keywords": ["环岛路", "骑行", "日落", "海滩"],
+    "relevant_documents": [
+      {"source": "xiamen_guide.md", "title": "2.4 环岛路", "relevance": 3},
+      {"source": "xiamen_guide.md", "title": "5. 经典三日行程参考 (Agent 提取样本)", "relevance": 2}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "sanya_beach_resort",
+    "tags": ["semantic", "multi_intent"],
     "destination": "三亚",
     "preferences": ["海滩", "度假", "放松"],
     "pace": "轻松",
     "special_notes": "想住好酒店，泡沙滩，什么都不干。",
+    "retrieval_query": "三亚 高端度假酒店 优质沙滩 海湾 泡酒店 放松",
+    "lexical_query": "亚龙湾 海棠湾 高端酒店 沙滩 800-3000元",
+    "rerank_query": "去三亚主要想住高端酒店、享受优质沙滩和放空，不需要紧凑的景点行程。",
     "top_k": 5,
-    "expected_title_keywords": ["亚龙湾", "行程", "蜈支洲"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["亚龙湾", "住宿区域建议", "经典四日行程"],
     "required_content_keywords": ["亚龙湾", "沙滩", "酒店", "潜水"],
+    "relevant_documents": [
+      {"source": "sanya_guide.md", "title": "2.1 亚龙湾", "relevance": 3},
+      {"source": "sanya_guide.md", "title": "4. 住宿区域建议", "relevance": 3},
+      {"source": "sanya_guide.md", "title": "5. 经典四日行程参考 (Agent 提取样本)", "relevance": 1}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "sanya_family_kid",
+    "tags": ["exact_entity", "family"],
     "destination": "三亚",
     "preferences": ["亲子", "水上乐园", "海洋"],
     "pace": "轻松",
     "special_notes": "带小孩去，想玩水世界和看海洋动物。",
+    "retrieval_query": "三亚 亲子 水上乐园 海洋生物 水族馆 一日游",
+    "lexical_query": "亚特兰蒂斯水世界 水族馆 海神之怒 漂流河 造浪池",
+    "rerank_query": "带孩子去三亚，想用一天玩亚特兰蒂斯水世界并参观水族馆看海洋动物。",
     "top_k": 5,
-    "expected_title_keywords": ["亚特兰蒂斯", "蜈支洲", "行程"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["亚特兰蒂斯水世界", "经典四日行程"],
     "required_content_keywords": ["亚特兰蒂斯", "水世界", "水族馆", "亲子"],
+    "relevant_documents": [
+      {"source": "sanya_guide.md", "title": "2.5 亚特兰蒂斯水世界", "relevance": 3},
+      {"source": "sanya_guide.md", "title": "5. 经典四日行程参考 (Agent 提取样本)", "relevance": 2}
+    ],
     "noise_title_keywords": ["文档开头"]
   },
   {
     "id": "sanya_seafood_culture",
+    "tags": ["exact_entity", "multi_intent"],
     "destination": "三亚",
     "preferences": ["美食", "海鲜", "文化"],
     "pace": "适中",
     "special_notes": "想吃新鲜海鲜，也想去南山寺看看。",
+    "retrieval_query": "三亚 海鲜 美食 佛教文化 南山寺 观音",
+    "lexical_query": "第一市场 海鲜 南山文化旅游区 108米海上观音 椰子鸡",
+    "rerank_query": "三亚行程既想去第一市场吃新鲜海鲜，也想参观南山寺和108米海上观音。",
     "top_k": 5,
-    "expected_title_keywords": ["餐饮", "南山", "行程"],
+    "candidate_k": 10,
+    "expected_title_keywords": ["特色餐饮与预算参考", "南山文化旅游区", "经典四日行程"],
     "required_content_keywords": ["海鲜", "南山", "观音", "椰子鸡"],
+    "relevant_documents": [
+      {"source": "sanya_guide.md", "title": "2.4 南山文化旅游区", "relevance": 3},
+      {"source": "sanya_guide.md", "title": "3. 特色餐饮与预算参考", "relevance": 3},
+      {"source": "sanya_guide.md", "title": "5. 经典四日行程参考 (Agent 提取样本)", "relevance": 2}
+    ],
+    "noise_title_keywords": ["文档开头"]
+  },
+  {
+    "id": "dali_three_pagodas_75_ticket",
+    "tags": ["exact_entity", "numeric", "hard_negative"],
+    "destination": "大理",
+    "preferences": ["古迹", "摄影"],
+    "pace": "适中",
+    "special_notes": "想找古城北郊的皇家寺院古塔，确认75元门票。",
+    "retrieval_query": "大理 皇家寺院 古塔 历史 摄影 古城北郊",
+    "lexical_query": "崇圣寺三塔 75元 大理古城北郊 1.5公里",
+    "rerank_query": "大理古城北郊约1.5公里、门票75元、背靠苍山面朝洱海的皇家寺院古塔是哪处景点？",
+    "top_k": 3,
+    "candidate_k": 8,
+    "expected_title_keywords": ["崇圣寺三塔"],
+    "required_content_keywords": ["崇圣寺三塔", "75元", "1.5 公里", "摄影"],
+    "relevant_documents": [
+      {"source": "dali_guide.md", "title": "2.2 崇圣寺三塔", "relevance": 3}
+    ],
+    "noise_documents": [
+      {"source": "dali_guide.md", "title": "2.4 洱海生态廊道 (骑行)"},
+      {"source": "dali_guide.md", "title": "3. 特色餐饮与预算参考"}
+    ],
+    "noise_title_keywords": ["文档开头"]
+  },
+  {
+    "id": "xian_belt_noodle_alias_budget",
+    "tags": ["alias", "numeric", "hard_negative"],
+    "destination": "西安",
+    "preferences": ["面食", "预算"],
+    "pace": "适中",
+    "special_notes": "想吃又宽又长、像裤带一样的面，预算多少？",
+    "retrieval_query": "西安 特色宽面 裤带形状 面食 小吃 人均预算",
+    "lexical_query": "裤带面 biangbiang面 biangbiang 面 20-30元",
+    "rerank_query": "西安那种又宽又长、像裤带一样的面叫什么？通常人均预算是多少？",
+    "top_k": 3,
+    "candidate_k": 8,
+    "expected_title_keywords": ["特色餐饮与预算参考", "回民街"],
+    "required_content_keywords": ["biangbiang", "裤带面", "20-30元"],
+    "relevant_documents": [
+      {"source": "xian_guide.md", "title": "3. 特色餐饮与预算参考", "relevance": 3},
+      {"source": "xian_guide.md", "title": "2.4 回民街", "relevance": 1}
+    ],
+    "noise_documents": [
+      {"source": "xian_guide.md", "title": "4. 住宿区域建议"}
+    ],
+    "noise_title_keywords": ["文档开头"]
+  },
+  {
+    "id": "chengdu_qingcheng_back_mountain_ticket",
+    "tags": ["exact_entity", "numeric", "hard_negative"],
+    "destination": "成都",
+    "preferences": ["徒步", "自然", "道教"],
+    "pace": "适中",
+    "special_notes": "想去道教名山，后山门票20元的那个。",
+    "retrieval_query": "成都 道教名山 徒步 清静 自然风光 前山后山",
+    "lexical_query": "青城山 后山 20元 前山 80元 青城天下幽",
+    "rerank_query": "成都附近哪座道教名山前山门票80元、后山20元，且适合徒步和清静自然环境？",
+    "top_k": 3,
+    "candidate_k": 8,
+    "expected_title_keywords": ["青城山"],
+    "required_content_keywords": ["青城山", "道教", "后山 20元", "徒步"],
+    "relevant_documents": [
+      {"source": "chengdu_guide.md", "title": "2.5 青城山", "relevance": 3}
+    ],
+    "noise_documents": [
+      {"source": "chengdu_guide.md", "title": "2.4 都江堰"}
+    ],
+    "noise_title_keywords": ["文档开头"]
+  },
+  {
+    "id": "sanya_free_rocks_sunset_2023",
+    "tags": ["exact_entity", "numeric", "hard_negative"],
+    "destination": "三亚",
+    "preferences": ["日落", "文化地标", "拍照"],
+    "pace": "轻松",
+    "special_notes": "想去2023年起免门票、以两块巨石得名的地方看日落。",
+    "retrieval_query": "三亚 文化地标 海边巨石 日落 摄影 免费景点",
+    "lexical_query": "天涯海角 2023 免费 日落 巨石",
+    "rerank_query": "三亚哪处文化地标因两块巨石得名、从2023年起免门票，而且适合日落时拍照？",
+    "top_k": 3,
+    "candidate_k": 8,
+    "expected_title_keywords": ["天涯海角"],
+    "required_content_keywords": ["天涯海角", "2023", "免费", "日落"],
+    "relevant_documents": [
+      {"source": "sanya_guide.md", "title": "2.3 天涯海角", "relevance": 3}
+    ],
+    "noise_documents": [
+      {"source": "sanya_guide.md", "title": "2.1 亚龙湾"}
+    ],
+    "noise_title_keywords": ["文档开头"]
+  },
+  {
+    "id": "suzhou_garden_museum_walk",
+    "tags": ["semantic", "pdf", "hard_negative"],
+    "destination": "苏州",
+    "preferences": ["园林", "建筑", "城市漫步"],
+    "pace": "轻松",
+    "special_notes": "想把园林、博物馆和平江路串成步行线。",
+    "retrieval_query": "苏州 古典园林 江南建筑 博物馆 古城水巷 步行路线",
+    "lexical_query": "拙政园 苏州博物馆 平江路 东北街 预约",
+    "rerank_query": "在苏州想用步行路线串联拙政园、苏州博物馆和平江历史街区，并了解各处特点。",
+    "top_k": 3,
+    "candidate_k": 8,
+    "expected_title_keywords": ["目的地简介"],
+    "required_content_keywords": ["拙政园", "苏州博物馆", "平江", "步行"],
+    "relevant_documents": [
+      {
+        "source": "苏州_guide.pdf",
+        "title": "1. 目的地简介",
+        "page_start": 2,
+        "text_contains_all": ["拙政园", "苏州博物馆", "平江历史街区"],
+        "relevance": 3
+      }
+    ],
+    "noise_documents": [
+      {
+        "source": "苏州_guide.pdf",
+        "title": "1. 目的地简介",
+        "page_start": 2,
+        "text_contains_all": ["空间层次紧凑", "金鸡湖", "苏式汤面"]
+      },
+      {"source": "苏州_guide.pdf", "page_start": 1}
+    ],
+    "noise_title_keywords": ["文档开头"]
+  },
+  {
+    "id": "yangzhou_bridges_garden_slow",
+    "tags": ["exact_entity", "pdf", "hard_negative"],
+    "destination": "扬州",
+    "preferences": ["园林", "摄影", "慢游"],
+    "pace": "轻松",
+    "special_notes": "想看五亭桥、白塔和二十四桥，也想了解盐商园林。",
+    "retrieval_query": "扬州 湖上园林 桥亭花木 盐商园林 慢游 摄影",
+    "lexical_query": "瘦西湖 五亭桥 白塔 二十四桥 个园",
+    "rerank_query": "扬州哪里能集中看到五亭桥、白塔和二十四桥？还想顺带了解以竹景和四季假山闻名的盐商园林。",
+    "top_k": 3,
+    "candidate_k": 8,
+    "expected_title_keywords": ["目的地简介"],
+    "required_content_keywords": ["瘦西湖", "五亭桥", "白塔", "二十四桥", "个园"],
+    "relevant_documents": [
+      {
+        "source": "扬州_guide.pdf",
+        "title": "1. 目的地简介",
+        "page_start": 2,
+        "text_contains_all": ["五亭桥", "白塔", "二十四桥", "个园"],
+        "relevance": 3
+      }
+    ],
+    "noise_documents": [
+      {
+        "source": "扬州_guide.pdf",
+        "title": "1. 目的地简介",
+        "page_start": 2,
+        "text_contains_all": ["大运河博物馆", "特色餐饮"]
+      },
+      {"source": "扬州_guide.pdf", "page_start": 1}
+    ],
+    "noise_title_keywords": ["文档开头"]
+  },
+  {
+    "id": "hangzhou_temple_stone_carving_semantic",
+    "tags": ["semantic", "pdf", "hard_negative"],
+    "destination": "杭州",
+    "preferences": ["山林", "石刻", "寺院文化"],
+    "pace": "适中",
+    "special_notes": "不想只环西湖打卡，想去山林、石刻和寺院集中的地方。",
+    "retrieval_query": "杭州 山林 石刻 寺院文化 世界遗产 避开单纯西湖打卡",
+    "lexical_query": "灵隐 飞来峰 石刻 寺院 3-4小时",
+    "rerank_query": "杭州不想只环西湖打卡，想找山林、石刻和寺院文化集中的景区，最好能了解建议游览时长。",
+    "top_k": 3,
+    "candidate_k": 8,
+    "expected_title_keywords": ["目的地简介"],
+    "required_content_keywords": ["灵隐", "飞来峰", "石刻", "寺院", "3-4 小时"],
+    "relevant_documents": [
+      {
+        "source": "杭州_guide.pdf",
+        "title": "1. 目的地简介",
+        "page_start": 2,
+        "text_contains_all": ["灵隐飞来峰景区", "山林", "石刻", "寺院文化"],
+        "relevance": 3
+      }
+    ],
+    "noise_documents": [
+      {
+        "source": "杭州_guide.pdf",
+        "title": "1. 目的地简介",
+        "page_start": 2,
+        "text_contains_all": ["京杭大运河杭州段", "特色餐饮"]
+      },
+      {"source": "杭州_guide.pdf", "page_start": 1}
+    ],
+    "noise_title_keywords": ["文档开头"]
+  },
+  {
+    "id": "nanjing_qinhuai_night_walk",
+    "tags": ["exact_entity", "pdf", "hard_negative", "night"],
+    "destination": "南京",
+    "preferences": ["古城", "历史", "夜游"],
+    "pace": "适中",
+    "special_notes": "想把夫子庙、科举博物馆、白鹭洲和老门东串起来夜游。",
+    "retrieval_query": "南京 秦淮古城 夜游 科举文化 城墙 街巷 晚餐",
+    "lexical_query": "夫子庙 秦淮河 科举博物馆 白鹭洲 中华门 老门东 夜景",
+    "rerank_query": "南京想安排秦淮古城夜游，串联夫子庙、科举博物馆、白鹭洲、中华门和老门东。",
+    "top_k": 3,
+    "candidate_k": 8,
+    "expected_title_keywords": ["目的地简介"],
+    "required_content_keywords": ["夫子庙", "科举博物馆", "白鹭洲", "中华门", "老门东"],
+    "relevant_documents": [
+      {
+        "source": "南京_guide.pdf",
+        "title": "1. 目的地简介",
+        "page_start": 2,
+        "text_contains_all": ["中山陵", "夫子庙", "科举博物馆", "白鹭洲", "中华门", "老门东"],
+        "relevance": 3
+      }
+    ],
+    "noise_documents": [
+      {"source": "南京_guide.pdf", "page_start": 1},
+      {
+        "source": "南京_guide.pdf",
+        "title": "4. 住宿区域建议",
+        "page_start": 3,
+        "text_contains_all": ["预算使用说明", "住宿 40%-50%"]
+      }
+    ],
     "noise_title_keywords": ["文档开头"]
   }
 ]
