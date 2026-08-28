@@ -1,4 +1,5 @@
 import hashlib
+import inspect
 import json
 import logging
 import re
@@ -23,19 +24,111 @@ DASHSCOPE_RERANK_URL = "https://dashscope.aliyuncs.com/compatible-api/v1/reranks
 logger = logging.getLogger(__name__)
 
 
+_RERANK_CACHE_VERSION = "v2"
+_GUIDE_CACHE_VERSION = "v2"
+_RERANK_QUERY_LABELS = {
+    "用户旅行需求",
+    "目的地",
+    "旅行偏好",
+    "偏好",
+    "行程节奏",
+    "节奏",
+    "特别备注",
+    "备注",
+}
+_RERANK_INTENT_TERMS = (
+    "日落",
+    "傍晚",
+    "日出",
+    "清晨",
+    "拍照",
+    "摄影",
+    "出片",
+    "美食",
+    "小吃",
+    "海鲜",
+    "轻松",
+    "慢节奏",
+    "休闲",
+    "古镇",
+    "骑行",
+    "熊猫",
+    "大熊猫",
+    "潜水",
+    "亲子",
+    "历史",
+    "文化",
+    "自然风景",
+    "购物",
+    "夜景",
+    "预算",
+    "省钱",
+    "路线",
+    "行程",
+)
+_DINING_QUERY_TERMS = ("餐饮", "美食", "小吃", "吃", "海鲜")
+_BUDGET_QUERY_TERMS = ("预算", "费用", "价格", "省钱", "花费", "人均", "多少钱")
+_NEGATED_ITINERARY_RE = re.compile(
+    r"(?:不想|不要|无需|不需要|不必|避免)[^，。；;\n]{0,10}(?:行程|路线|安排|规划|日程)"
+)
+
+
 def _normalize_cache_text(value: str) -> str:
     """把检索 query 做简单标准化，避免大小写和空格造成重复 key。"""
     return " ".join(value.strip().lower().split())
 
 
-def _extract_query_keywords(query: str) -> list[str]:
-    """从 query 中切出用于轻量重排序的关键词。"""
-    raw_parts = re.split(r"[\s,，。；;、]+", query)
-    return [part.strip() for part in raw_parts if part.strip()]
+def _extract_query_keywords(
+    query: str,
+    destination: str | None = None,
+) -> list[str]:
+    """从关键词串或结构化自然语言需求中提取规则重排词。"""
+    normalized_destination = (destination or "").strip().lower()
+    raw_parts = re.split(r"[\s,，。；;、:：！？!?（）()【】\[\]]+", query)
+    keywords: list[str] = []
+    for part in raw_parts:
+        normalized = part.strip()
+        if not normalized or normalized in _RERANK_QUERY_LABELS:
+            continue
+        if normalized_destination and normalized.lower() == normalized_destination:
+            continue
+        if normalized not in keywords:
+            keywords.append(normalized)
+
+    # “行程节奏”是字段名，不代表用户需要行程类文档。
+    intent_text = re.sub(
+        r"(?:行程节奏|旅行节奏)\s*[：:]\s*[^\n]*",
+        "",
+        query,
+    )
+    # 中文整句没有天然空格；补出常见旅行意图词供无模型时的规则重排使用。
+    for term in _RERANK_INTENT_TERMS:
+        if normalized_destination and term.lower() == normalized_destination:
+            continue
+        if term in intent_text and term not in keywords:
+            keywords.append(term)
+    return keywords
 
 
 def _contains_any(text: str, keywords: list[str]) -> bool:
     return any(keyword in text for keyword in keywords)
+
+
+def _has_itinerary_intent(query: str) -> bool:
+    """区分用户主动要求排行程与结构化查询里的“行程节奏”字段名。"""
+    intent_text = re.sub(
+        r"(?:行程节奏|旅行节奏)\s*[：:]\s*[^\n]*",
+        "",
+        query,
+    )
+    intent_text = _NEGATED_ITINERARY_RE.sub("", intent_text)
+    return _contains_any(intent_text, ["行程", "路线", "安排", "规划", "几天", "日程"])
+
+
+def _canonical_chunk_title(title: str) -> str:
+    """移除章节编号和说明后缀，用于识别用户明确点名的标题实体。"""
+    normalized = re.sub(r"^\s*\d+(?:\.\d+)*[.、]?\s*", "", title).strip()
+    return re.sub(r"\s*[（(][^（）()]*[）)]\s*$", "", normalized).strip()
 
 
 def _score_chunk_for_rerank(
@@ -48,30 +141,43 @@ def _score_chunk_for_rerank(
     text = chunk.get("text", "")
     source = chunk.get("source", "")
     breadcrumb = chunk.get("breadcrumb", "")
-    combined_text = f"{breadcrumb}\n{title}\n{text}"
     reasons: list[str] = []
 
     score = 0
-    for keyword in _extract_query_keywords(query):
+    has_keyword_match = False
+    for keyword in _extract_query_keywords(query, destination=destination):
         if keyword in title:
             score += 3
+            has_keyword_match = True
             reasons.append(f"title+3:{keyword}")
         if keyword in text:
             score += 1
+            has_keyword_match = True
             reasons.append(f"text+1:{keyword}")
+
+    canonical_title = _canonical_chunk_title(title)
+    if (
+        len(canonical_title) >= 2
+        and canonical_title != (destination or "").strip()
+        and canonical_title in query
+    ):
+        score += 5
+        has_keyword_match = True
+        reasons.append(f"title-exact+5:{canonical_title}")
 
     # 文档开头通常是低信息量噪声片段。
     if title == "文档开头":
         score -= 8
         reasons.append("noise-8:文档开头")
 
-    # 行程类片段更适合承接"景点 / 行程 / 推荐"类请求。
-    if "行程" in title and "行程参考" not in title:
+    has_itinerary_intent = _has_itinerary_intent(query)
+    # 用户明确要求路线或日程时，行程参考本身也是高价值候选。
+    if "行程" in title and has_itinerary_intent:
         score += 4
         reasons.append("domain+4:行程标题")
 
-    # "经典行程参考"类片段内容过于全面，会霸占 Top1，对非行程查询做降权。
-    if "行程参考" in title:
+    # "经典行程参考"内容较泛，只对没有行程意图的具体查询降权。
+    if "行程参考" in title and not has_itinerary_intent:
         score -= 4
         reasons.append("domain-4:行程参考降权")
 
@@ -80,17 +186,34 @@ def _score_chunk_for_rerank(
         score -= 2
         reasons.append("domain-2:目的地简介降权")
 
-    # 餐饮/预算类片段在"日落/拍照/轻松"这类主目标下通常不是最优候选。
-    if _contains_any(title, ["餐饮", "预算"]) and not _contains_any(
-        combined_text,
-        ["日落", "傍晚", "拍照", "摄影", "出片", "洱海", "双廊", "慢节奏"],
-    ):
+    # 语料把餐饮和预算放在同一片段；任一主题相关时都不应惩罚整段。
+    has_dining_title = "餐饮" in title
+    has_budget_title = "预算" in title
+    has_dining_intent = _contains_any(query, list(_DINING_QUERY_TERMS))
+    has_budget_intent = _contains_any(query, list(_BUDGET_QUERY_TERMS))
+    if has_dining_title and has_dining_intent and "餐饮" not in query:
+        score += 3
+        reasons.append("domain+3:餐饮意图")
+    if has_budget_title and has_budget_intent and "预算" not in query:
+        score += 3
+        reasons.append("domain+3:预算意图")
+
+    if has_dining_title and has_budget_title:
+        if not has_dining_intent and not has_budget_intent and not has_keyword_match:
+            score -= 3
+            reasons.append("domain-3:餐饮预算弱相关")
+    elif has_dining_title and not has_dining_intent and not has_keyword_match:
         score -= 3
-        reasons.append("domain-3:餐饮预算弱相关")
+        reasons.append("domain-3:餐饮弱相关")
+    elif has_budget_title and not has_budget_intent and not has_keyword_match:
+        score -= 3
+        reasons.append("domain-3:预算弱相关")
 
     # 目的地不匹配降权：片段来源与查询目的地不一致时降权。
     if destination:
-        chunk_lower = f"{source} {title} {text}".lower()
+        chunk_lower = (
+            f"{source} {breadcrumb} {title} {text} {chunk.get('destination', '')}"
+        ).lower()
         if destination.lower() not in chunk_lower:
             score -= 5
             reasons.append(f"dest-5:非{destination}片段")
@@ -158,12 +281,18 @@ def _rerank_with_dashscope(
     clean_chunks = [chunk for _, chunk in filtered]
 
     documents = [
-        f"{chunk.get('title', '')}\n{chunk.get('text', '')}"
+        (
+            f"路径：{chunk.get('breadcrumb', '')}\n"
+            f"标题：{chunk.get('title', '')}\n"
+            f"正文：{chunk.get('text', '')}"
+        )
         for chunk in clean_chunks
     ]
     instruct = (
         "你是一个旅行攻略检索专家。"
-        "给定一个旅行规划查询，从候选文档中检索出最具体、最详细、最能直接回答用户问题的片段。"
+        "查询中包含用户完整的目的地、偏好、节奏和特别备注。"
+        "请综合判断所有原始约束，包括时间、否定要求和指定实体，"
+        "从候选文档中检索出最具体、最详细、最能直接回答用户问题的片段。"
         "优先选择包含具体景点名称、活动推荐、实用信息的片段，"
         "避免选择泛化的目的地简介、文档开头等信息量低的片段。"
     )
@@ -230,25 +359,63 @@ def _rerank_with_dashscope(
         return None, empty_usage
 
 
-def _build_rerank_cache_key(query: str, chunks: list[dict[str, str]]) -> str:
-    """根据 query 和 chunk 内容生成 rerank 缓存 key。"""
-    """
-query = " 大理 自然风景 "，_normalize_cache_text 处理后得到 "大理 自然风景"。
-
-chunks = [{"source": "大理攻略.md", "title": "苍山"}, {"source": "大理攻略.md", "title": "洱海"}]
-
-content_fingerprint = "大理攻略.md:苍山|大理攻略.md:洱海"
-
-chunks_hash = hashlib.md5("大理攻略.md:苍山|大理攻略.md:洱海".encode()).hexdigest()[:12] → 假设得到 "a1b2c3d4e5f6"
-
-最终缓存键："rerank:大理 自然风景:a1b2c3d4e5f6"
-    """
+def _build_rerank_cache_key(
+    query: str,
+    chunks: list[dict[str, str]],
+    top_k: int | None = None,
+) -> str:
+    """按完整重排查询、候选内容和返回数量生成稳定缓存键。"""
     normalized_query = _normalize_cache_text(query)
-    content_fingerprint = "|".join(
-        f"{c.get('source', '')}:{c.get('title', '')}" for c in chunks
+    query_hash = hashlib.sha256(normalized_query.encode("utf-8")).hexdigest()[:20]
+    content_fingerprint = [
+        {
+            "id": chunk.get("id", ""),
+            "chunk_id": chunk.get("chunk_id", ""),
+            "source": chunk.get("source", ""),
+            "breadcrumb": chunk.get("breadcrumb", ""),
+            "title": chunk.get("title", ""),
+            "text": chunk.get("text", ""),
+            "page_start": chunk.get("page_start", 0),
+            "page_end": chunk.get("page_end", 0),
+        }
+        for chunk in chunks
+    ]
+    serialized_chunks = json.dumps(
+        content_fingerprint,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     )
-    chunks_hash = hashlib.md5(content_fingerprint.encode()).hexdigest()[:12]
-    return f"rerank:{normalized_query}:{chunks_hash}"
+    chunks_hash = hashlib.sha256(serialized_chunks.encode("utf-8")).hexdigest()[:20]
+    return (
+        f"rerank:{_RERANK_CACHE_VERSION}:{RERANK_MODEL}:"
+        f"{query_hash}:{chunks_hash}:{top_k or 0}"
+    )
+
+
+def _build_guide_cache_key(
+    query: str,
+    lexical_query: str,
+    rerank_query: str,
+    destination: str | None,
+    top_k: int,
+) -> str:
+    """让最终结果缓存同时区分三路查询。"""
+    fingerprint = {
+        "dense_query": _normalize_cache_text(query),
+        "lexical_query": _normalize_cache_text(lexical_query),
+        "rerank_query": _normalize_cache_text(rerank_query),
+        "destination": _normalize_cache_text(destination or ""),
+        "top_k": top_k,
+    }
+    serialized = json.dumps(
+        fingerprint,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    fingerprint_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:24]
+    return f"rag:guide:{_GUIDE_CACHE_VERSION}:{fingerprint_hash}"
 
 
 def rerank_guide_chunks(
@@ -264,7 +431,7 @@ def rerank_guide_chunks(
         return [], empty_usage
 
     # 尝试从缓存读取 rerank 结果
-    cache_key = _build_rerank_cache_key(query, matched_chunks)
+    cache_key = _build_rerank_cache_key(query, matched_chunks, top_k=top_k)
     cached = get_cached_json(cache_key)
     if cached is not None:
         logger.info("[RAG·Rerank] 命中缓存，不消耗 Token")
@@ -320,18 +487,55 @@ def rerank_guide_chunks(
     ][:top_k], empty_usage
 
 
+def _search_retrieval_candidates(
+    query: str,
+    lexical_query: str,
+    top_k: int,
+    destination: str | None,
+) -> tuple[list[dict[str, str]], dict[str, int]]:
+    """兼容尚未支持独立 lexical query 的旧版向量检索接口。"""
+    search_kwargs: dict[str, object] = {
+        "query": query,
+        "top_k": top_k,
+        "destination": destination,
+    }
+    try:
+        parameters = inspect.signature(search_guide_chunks_with_usage).parameters
+        supports_lexical_query = "lexical_query" in parameters or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+    except (TypeError, ValueError):
+        supports_lexical_query = False
+
+    if supports_lexical_query:
+        search_kwargs["lexical_query"] = lexical_query
+    return search_guide_chunks_with_usage(**search_kwargs)
+
+
 def retrieve_travel_guide_chunks(
-    query: str, top_k: int = 3, destination: str | None = None
+    query: str,
+    top_k: int = 3,
+    destination: str | None = None,
+    *,
+    lexical_query: str | None = None,
+    rerank_query: str | None = None,
 ) -> tuple[list[dict[str, str]], dict[str, int], dict[str, int]]:
-    """返回带轻量 rerank 的原始攻略片段。返回 (chunks, rerank_usage, embedding_usage)。"""
+    """用独立的召回和重排查询返回攻略片段。"""
+    effective_lexical_query = query if lexical_query is None else lexical_query
+    effective_rerank_query = query if rerank_query is None else rerank_query
     candidate_k = max(top_k * 2, 6)
-    matched_chunks, embedding_usage = search_guide_chunks_with_usage(
+    matched_chunks, embedding_usage = _search_retrieval_candidates(
         query=query,
+        lexical_query=effective_lexical_query,
         top_k=candidate_k,
         destination=destination,
     )
     reranked_chunks, rerank_usage = rerank_guide_chunks(
-        query=query, matched_chunks=matched_chunks, top_k=top_k, destination=destination
+        query=effective_rerank_query,
+        matched_chunks=matched_chunks,
+        top_k=top_k,
+        destination=destination,
     )
     return reranked_chunks, rerank_usage, embedding_usage
 
@@ -340,12 +544,20 @@ def retrieve_travel_guide(
     query: str,
     top_k: int = 3,
     destination: str | None = None,
+    *,
+    lexical_query: str | None = None,
+    rerank_query: str | None = None,
 ) -> tuple[list[str], dict[str, int], dict[str, int]]:
     """返回最相关的攻略片段。返回 (texts, rerank_usage, embedding_usage)。"""
     empty_usage = {"prompt_tokens": 0, "completion_tokens": 0}
-    cache_key = (
-        f"rag:guide:{_normalize_cache_text(destination or '')}:"
-        f"{_normalize_cache_text(query)}:{top_k}"
+    effective_lexical_query = query if lexical_query is None else lexical_query
+    effective_rerank_query = query if rerank_query is None else rerank_query
+    cache_key = _build_guide_cache_key(
+        query=query,
+        lexical_query=effective_lexical_query,
+        rerank_query=effective_rerank_query,
+        destination=destination,
+        top_k=top_k,
     )
     cached_value = get_cached_json(cache_key)
     if cached_value is not None:
@@ -357,6 +569,8 @@ def retrieve_travel_guide(
         query=query,
         top_k=top_k,
         destination=destination,
+        lexical_query=effective_lexical_query,
+        rerank_query=effective_rerank_query,
     )
 
     results: list[str] = []

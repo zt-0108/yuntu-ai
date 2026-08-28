@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 
 from app.config import (
     LLM_API_KEY,
@@ -11,6 +12,15 @@ from app.rag.retriever import retrieve_travel_guide
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DestinationRetrievalQueries:
+    """一次目的地检索所需的三种查询表达。"""
+
+    dense_query: str
+    lexical_query: str
+    rerank_query: str
 
 
 # rag_tool.py 自己不直接检索，
@@ -156,21 +166,69 @@ def _rule_based_query(
 ) -> str:
     """规则级 Query Rewrite，作为 LLM Rewrite 的 fallback。"""
     parts: list[str] = [destination]
+    has_specific_requirement = False
 
     if preferences:
         for preference in preferences:
             _append_unique(parts, preference)
+            has_specific_requirement = has_specific_requirement or bool(preference.strip())
 
     if pace:
         _append_unique(parts, pace)
+        has_specific_requirement = has_specific_requirement or bool(pace.strip())
+
+    if special_notes:
+        # 未被规则表覆盖的景点名、数字或否定要求也不能在 fallback 中丢失。
+        _append_unique(parts, special_notes)
+        has_specific_requirement = has_specific_requirement or bool(special_notes.strip())
 
     for keyword in _extract_note_keywords(special_notes, destination=destination):
         _append_unique(parts, keyword)
 
-    for stable_term in ["景点", "行程", "攻略", "推荐"]:
-        _append_unique(parts, stable_term)
+    # 只有完全没有具体需求时才补通用意图，避免泛词稀释精确查询。
+    if not has_specific_requirement:
+        for stable_term in ["景点", "攻略", "推荐"]:
+            _append_unique(parts, stable_term)
 
     return " ".join(part for part in parts if part).strip()
+
+
+def _build_lexical_query(
+    destination: str,
+    preferences: list[str] | None = None,
+    pace: str | None = None,
+    special_notes: str | None = None,
+) -> str:
+    """构造保留原始实体和约束的关键词查询，供关键词召回使用。"""
+    parts: list[str] = []
+    _append_unique(parts, destination)
+
+    for preference in preferences or []:
+        _append_unique(parts, preference)
+    if pace:
+        _append_unique(parts, pace)
+    if special_notes:
+        _append_unique(parts, special_notes)
+
+    return " ".join(parts)
+
+
+def _build_rerank_query(
+    destination: str,
+    preferences: list[str] | None = None,
+    pace: str | None = None,
+    special_notes: str | None = None,
+) -> str:
+    """构造完整的自然语言需求，让重排器能看到原始约束和否定表达。"""
+    lines = [f"目的地：{destination.strip()}"]
+    normalized_preferences = [item.strip() for item in preferences or [] if item.strip()]
+    if normalized_preferences:
+        lines.append(f"旅行偏好：{'、'.join(normalized_preferences)}")
+    if pace and pace.strip():
+        lines.append(f"行程节奏：{pace.strip()}")
+    if special_notes and special_notes.strip():
+        lines.append(f"特别备注：{special_notes.strip()}")
+    return "\n".join(lines)
 
 
 def build_destination_query(
@@ -198,6 +256,36 @@ def build_destination_query(
     ), {"prompt_tokens": 0, "completion_tokens": 0}
 
 
+def build_destination_queries(
+    destination: str,
+    preferences: list[str] | None = None,
+    pace: str | None = None,
+    special_notes: str | None = None,
+) -> tuple[DestinationRetrievalQueries, dict[str, int]]:
+    """分别构造语义召回、关键词召回和重排查询。"""
+    dense_query, rewrite_usage = build_destination_query(
+        destination=destination,
+        preferences=preferences,
+        pace=pace,
+        special_notes=special_notes,
+    )
+    return DestinationRetrievalQueries(
+        dense_query=dense_query,
+        lexical_query=_build_lexical_query(
+            destination=destination,
+            preferences=preferences,
+            pace=pace,
+            special_notes=special_notes,
+        ),
+        rerank_query=_build_rerank_query(
+            destination=destination,
+            preferences=preferences,
+            pace=pace,
+            special_notes=special_notes,
+        ),
+    ), rewrite_usage
+
+
 def _build_destination_query(
     destination: str,
     preferences: list[str] | None = None,
@@ -221,15 +309,17 @@ def get_destination_guide_context(
     top_k: int = 5,
 ) -> tuple[list[str], dict[str, int], dict[str, int], dict[str, int]]:
     """根据目的地和偏好返回本地攻略片段。返回 (contexts, rewrite_usage, rerank_usage, embedding_usage)。"""
-    query, rewrite_usage = build_destination_query(
+    queries, rewrite_usage = build_destination_queries(
         destination=destination,
         preferences=preferences,
         pace=pace,
         special_notes=special_notes,
     )
     contexts, rerank_usage, embedding_usage = retrieve_travel_guide(
-        query=query,
+        query=queries.dense_query,
         top_k=top_k,
         destination=destination,
+        lexical_query=queries.lexical_query,
+        rerank_query=queries.rerank_query,
     )
     return contexts, rewrite_usage, rerank_usage, embedding_usage

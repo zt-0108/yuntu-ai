@@ -472,7 +472,7 @@ def _search_guide_chunks_by_chroma(
     query: str,
     top_k: int = 3,
     destination: str | None = None,
-) -> tuple[list[dict[str, str]], dict[str, int]]:
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """优先使用 Chroma 做向量检索，并返回在线 query embedding token。"""
     collection = _get_chroma_collection()
     empty_usage = {"prompt_tokens": 0, "completion_tokens": 0}
@@ -499,23 +499,38 @@ def _search_guide_chunks_by_chroma(
     documents = result.get("documents", [[]])[0]
     metadatas = result.get("metadatas", [[]])[0]
     distances = result.get("distances", [[]])[0]
+    result_ids = result.get("ids", [[]])[0]
 
-    matched_chunks: list[dict[str, str]] = []
-    for document, metadata, distance in zip(documents, metadatas, distances):
+    matched_chunks: list[dict[str, Any]] = []
+    for index, (document, metadata, distance) in enumerate(
+        zip(documents, metadatas, distances)
+    ):
         if distance is None or float(distance) > RAG_MAX_VECTOR_DISTANCE:
             continue
         title = metadata.get("title", "未命名片段") if metadata else "未命名片段"
         source = metadata.get("source", "未知来源") if metadata else "未知来源"
         breadcrumb = metadata.get("breadcrumb", title) if metadata else title
         text = document.split("\n", 1)[1] if "\n" in document else document
+        page_start = metadata.get("page_start", 0) if metadata else 0
+        chunk_id = (
+            str(result_ids[index])
+            if index < len(result_ids) and result_ids[index]
+            else _build_chunk_id(
+                source=source,
+                title=title,
+                text=text,
+                page_start=int(page_start or 0),
+            )
+        )
         matched_chunks.append(
             {
+                "id": chunk_id,
                 "title": title,
                 "text": text,
                 "source": source,
                 "breadcrumb": breadcrumb,
                 "destination": metadata.get("destination", "") if metadata else "",
-                "page_start": metadata.get("page_start", 0) if metadata else 0,
+                "page_start": page_start,
                 "page_end": metadata.get("page_end", 0) if metadata else 0,
                 "parser": metadata.get("parser", "unknown") if metadata else "unknown",
             }
@@ -528,13 +543,18 @@ def search_guide_chunks_with_usage(
     query: str,
     top_k: int = 3,
     destination: str | None = None,
-) -> tuple[list[dict[str, str]], dict[str, int]]:
+    *,
+    lexical_query: str | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """
     从本地攻略片段里找最相关的 top_k 条结果。
 
-    优先走 Chroma 向量检索；如果当前环境还没准备好，再回退到关键词检索。
+    优先走向量检索；向量不可用时使用独立 lexical query 做关键词回退。
     """
     empty_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+    if top_k <= 0:
+        return [], empty_usage
+
     chroma_results, embedding_usage = _search_guide_chunks_by_chroma(
         query=query,
         top_k=top_k,
@@ -542,8 +562,9 @@ def search_guide_chunks_with_usage(
     )
     if chroma_results:
         return chroma_results, embedding_usage
+    effective_lexical_query = lexical_query if lexical_query is not None else query
     return _search_guide_chunks_by_keywords(
-        query=query,
+        query=effective_lexical_query,
         top_k=top_k,
         destination=destination,
     ), empty_usage
